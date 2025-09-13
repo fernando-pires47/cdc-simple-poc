@@ -224,3 +224,7 @@ If you are having issues with the CDC pipeline, here are some commands that can 
     ```bash
     docker compose exec kafka kafka-console-consumer --bootstrap-server localhost:29092 --topic <topic_name> --from-beginning
     ```
+    
+## License
+
+MIT License
