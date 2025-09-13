@@ -8,7 +8,8 @@ This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL t
 2.  **Debezium (Kafka Connect)**: Monitors the PostgreSQL WAL (Write-Ahead Log) for changes in the `users` and `products` tables and publishes them to a Kafka topic. It's configured to handle `DECIMAL` types as `string` to avoid data corruption issues during serialization/deserialization.
 3.  **Kafka**: The message broker that receives the change events from Debezium.
 4.  **Consumer**: A Python application that consumes the change events from Kafka, formats them, and writes them to MongoDB.
-5.  **MongoDB**: The destination database that stores the consolidated user information.
+5.  **API**: A FastAPI application that exposes `/users` and `/products` endpoints to retrieve data from MongoDB.
+6.  **MongoDB**: The destination database that stores the consolidated user information.
 
 ## Prerequisites
 
@@ -224,7 +225,7 @@ If you are having issues with the CDC pipeline, here are some commands that can 
     ```bash
     docker compose exec kafka kafka-console-consumer --bootstrap-server localhost:29092 --topic <topic_name> --from-beginning
     ```
-    
+
 ## License
 
 MIT License
