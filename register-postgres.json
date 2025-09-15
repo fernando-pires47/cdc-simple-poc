@@ -11,6 +11,15 @@
     "table.include.list": "public.users,public.products",
     "plugin.name": "pgoutput",
     "topic.prefix": "cdc",
-    "decimal.handling.mode": "string"
+    "decimal.handling.mode": "string",
+    "transforms": "RenamePrice,RenameName",
+    "transforms.RenamePrice.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+    "transforms.RenamePrice.renames": "price:value",
+    "transforms.RenameName.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+    "transforms.RenameName.renames": "name:description",
+    "transforms.RenameName.predicate": "IsProductsTable",
+    "predicates": "IsProductsTable",
+    "predicates.IsProductsTable.type": "org.apache.kafka.connect.transforms.predicates.TopicNameMatches",
+    "predicates.IsProductsTable.pattern": "cdc.public.products"
   }
 }
