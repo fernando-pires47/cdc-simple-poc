@@ -47,6 +47,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   connect:
     build: ./connect
@@ -55,6 +66,8 @@ services:
       kafka:
         condition: service_healthy
       postgres2:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       CONNECT_BOOTSTRAP_SERVERS: kafka:9092
@@ -104,19 +117,25 @@ services:
         condition: service_healthy
       mongo:
         condition: service_started
+      redis:
+        condition: service_healthy
     environment:
       KAFKA_BROKER: kafka:9092
       MONGO_URI: mongodb://mongo:27017/
+      REDIS_HOST: redis
 
   api:
     build: ./api
     container_name: api
     depends_on:
       - mongo
+      - redis
     environment:
       MONGO_URI: mongodb://mongo:27017/
+      REDIS_HOST: redis
     ports:
       - "8001:8000"
+      - "8002:8000"
 
   
 

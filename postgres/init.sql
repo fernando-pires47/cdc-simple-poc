@@ -13,3 +13,6 @@ CREATE TABLE products (
 );
 
 ALTER TABLE products REPLICA IDENTITY FULL;
+
+INSERT INTO users (id, name, email) VALUES (1, 'John Doe', 'john.doe@example.com');
+INSERT INTO products (id, name, price) VALUES (1, 'Laptop', 1200.00);

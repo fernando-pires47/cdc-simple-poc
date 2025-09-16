@@ -162,6 +162,20 @@ This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL t
         {"products": []}
         ```
 
+    *   **Check Redis:**
+
+        Check if the user data is in Redis:
+
+        ```bash
+        curl http://localhost:8002/check-redis/user/1
+        ```
+
+        Check if the product data is in Redis:
+
+        ```bash
+        curl http://localhost:8002/check-redis/product/1
+        ```
+
 4.  **Stop the environment:**
 
     ```bash
