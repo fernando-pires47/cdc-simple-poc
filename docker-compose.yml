@@ -58,17 +58,37 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.2
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.15.2
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
 
   connect:
     build: ./connect
     container_name: connect
     depends_on:
-      kafka:
-        condition: service_healthy
-      postgres2:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - kafka
+      - postgres2
+      - redis
+      - elasticsearch
     environment:
       CONNECT_BOOTSTRAP_SERVERS: kafka:9092
       CONNECT_REST_ADVERTISED_HOST_NAME: connect
@@ -89,6 +109,9 @@ services:
       - "8083:8083"
     volumes:
       - ./register-postgres.json:/tmp/register-postgres.json
+      - ./register-elasticsearch.json:/tmp/register-elasticsearch.json
+
+  
 
   connector-setup:
     image: curlimages/curl:7.79.1
@@ -98,54 +121,40 @@ services:
     command: >
       sh -c "
         echo 'Waiting for Kafka Connect to start...';
-        while [ $(curl -s -o /dev/null -w ''%{http_code}'' http://connect:8083/connectors) -ne 200 ]; do
+        while [ $(curl -s -o /dev/null -w '''%{http_code}''' http://connect:8083/connectors) -ne 200 ]; do
           echo -n '.';
           sleep 5;
         done;
         echo 'Kafka Connect is up!';
         curl -X POST -H 'Content-Type: application/json' --data @/tmp/register-postgres.json http://connect:8083/connectors;
+        curl -X POST -H 'Content-Type: application/json' --data @/tmp/register-elasticsearch.json http://connect:8083/connectors;
       "
     volumes:
       - ./register-postgres.json:/tmp/register-postgres.json
+      - ./register-elasticsearch.json:/tmp/register-elasticsearch.json
 
   consumer:
     build: ./consumer
     container_name: consumer
-    command: ["/bin/sh", "-c", "sleep 30; python main.py"]
+    command: ["/bin/sh", "-c", "sleep 60; python main.py"]
     depends_on:
-      kafka:
-        condition: service_healthy
-      mongo:
-        condition: service_started
-      redis:
-        condition: service_healthy
+      - kafka
+      - redis
+      - elasticsearch
     environment:
       KAFKA_BROKER: kafka:9092
-      MONGO_URI: mongodb://mongo:27017/
+      ELASTICSEARCH_HOST: elasticsearch
       REDIS_HOST: redis
 
   api:
     build: ./api
     container_name: api
     depends_on:
-      - mongo
       - redis
+      - elasticsearch
     environment:
-      MONGO_URI: mongodb://mongo:27017/
+      ELASTICSEARCH_HOST: elasticsearch
       REDIS_HOST: redis
     ports:
       - "8001:8000"
       - "8002:8000"
-
-  
-
-  mongo:
-    image: mongo:latest
-    container_name: mongo
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-
-volumes:
-  mongodb_data:

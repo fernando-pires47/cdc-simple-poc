@@ -1,0 +1,12 @@
+{
+  "name": "elasticsearch-sink-connector",
+  "config": {
+    "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+    "topics": "cdc.public.users,cdc.public.products",
+    "connection.url": "http://elasticsearch:9200",
+    "type.name": "_doc",
+    "key.ignore": "true",
+    "schema.ignore": "false",
+    "behavior.on.null.values": "IGNORE"
+  }
+}

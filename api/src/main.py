@@ -1,60 +1,46 @@
 
 from fastapi import FastAPI, Response
-from pymongo import MongoClient
-from bson import ObjectId
+from elasticsearch import Elasticsearch
 import os
 import json
 import redis
 
 app = FastAPI()
 
-# Connect to MongoDB
-client = MongoClient(os.environ.get("MONGO_URI", "mongodb://mongo:27017/"))
-db = client.cdc_data
+# Connect to Elasticsearch
+es_host = os.environ.get("ELASTICSEARCH_HOST", "elasticsearch")
+es = Elasticsearch([f"http://{es_host}:9200"])
 
 # Connect to Redis
 redis_host = os.environ.get("REDIS_HOST", "redis")
-r = redis.Redis(host=redis_host, port=6379, db=0, decode_responses=True)
-
-
-class JSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, ObjectId):
-            return str(o)
-        return json.JSONEncoder.default(self, o)
+r = redis.Redis(host=redis_host, port=6379, db=0)
 
 @app.get("/users")
 def read_users():
-    users = list(db.users.find())
-    return Response(content=json.dumps({"users": users}, cls=JSONEncoder), media_type="application/json")
+    try:
+        res = es.search(index="cdc.public.users", body={"query": {"match_all": {}}})
+        users = [hit["_source"] for hit in res["hits"]["hits"]]
+        return Response(content=json.dumps({"users": users}), media_type="application/json")
+    except Exception as e:
+        return Response(content=json.dumps({"error": str(e)}), media_type="application/json", status_code=500)
 
 @app.get("/products")
 def read_products():
-    products = list(db.products.find())
-    return Response(content=json.dumps({"products": products}, cls=JSONEncoder), media_type="application/json")
-
-@app.get("/check-redis/{key}")
-def check_redis(key: str):
-    value = r.get(key)
-    if value:
-        return {"key": key, "value": value}
-    else:
-        return {"key": key, "found": False}
+    try:
+        res = es.search(index="cdc.public.products", body={"query": {"match_all": {}}})
+        products = [hit["_source"] for hit in res["hits"]["hits"]]
+        return Response(content=json.dumps({"products": products}), media_type="application/json")
+    except Exception as e:
+        return Response(content=json.dumps({"error": str(e)}), media_type="application/json", status_code=500)
 
 @app.get("/check-redis/user/{user_id}")
 def check_user(user_id: int):
-    key = f"cdc.public.users:{user_id}"
-    value = r.get(key)
-    if value:
-        return {"key": key, "value": value, "found": True}
-    else:
-        return {"key": key, "found": False}
+    key = f"user:{user_id}"
+    value = r.hgetall(key)
+    return {"key": key, "value": value}
 
 @app.get("/check-redis/product/{product_id}")
 def check_product(product_id: int):
-    key = f"cdc.public.products:{product_id}"
-    value = r.get(key)
-    if value:
-        return {"key": key, "value": value, "found": True}
-    else:
-        return {"key": key, "found": False}
+    key = f"product:{product_id}"
+    value = r.hgetall(key)
+    return {"key": key, "value": value}

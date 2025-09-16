@@ -1,15 +1,17 @@
-# CDC Boilerplate: PostgreSQL to MongoDB
+# CDC Boilerplate: PostgreSQL to Elasticsearch
 
 This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL to MongoDB using Debezium, Kafka, and a custom Python consumer.
 
 ## Architecture
 
 1.  **PostgreSQL**: The source database with `users` and `products` tables.
-2.  **Debezium (Kafka Connect)**: Monitors the PostgreSQL WAL (Write-Ahead Log) for changes in the `users` and `products` tables and publishes them to a Kafka topic. It's configured to handle `DECIMAL` types as `string` to avoid data corruption issues during serialization/deserialization.
+2.  **Debezium (Kafka Connect)**: Monitors the PostgreSQL WAL (Write-Ahead Log) for changes in the `users` and `products` tables and publishes them to a Kafka topic.
 3.  **Kafka**: The message broker that receives the change events from Debezium.
-4.  **Consumer**: A Python application that consumes the change events from Kafka, formats them, and writes them to MongoDB.
-5.  **API**: A FastAPI application that exposes `/users` and `/products` endpoints to retrieve data from MongoDB.
-6.  **MongoDB**: The destination database that stores the consolidated user information.
+4.  **Elasticsearch Sink Connector (Kafka Connect)**: Consumes the change events from Kafka and writes them to Elasticsearch.
+5.  **Elasticsearch**: The destination database that stores the consolidated user and product information.
+6.  **Kibana**: A visualization tool for Elasticsearch.
+7.  **API**: A FastAPI application that exposes `/users` and `/products` endpoints to retrieve data from Elasticsearch.
+8.  **Consumer**: A Python application that consumes the change events from Kafka and caches them in Redis.
 
 ## Prerequisites
 
@@ -21,7 +23,7 @@ This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL t
 1.  **Start the environment:**
 
     ```bash
-    docker compose up -d
+    docker compose up -d --build
     ```
 
 2.  **Verify the setup:**
@@ -32,10 +34,10 @@ This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL t
         docker compose logs -f
         ```
 
-    *   Verify that the Debezium connector is registered:
+    *   Verify that the Debezium and Elasticsearch connectors are registered:
 
         ```bash
-        curl http://localhost:8083/connectors/postgres-connector
+        curl http://localhost:8083/connectors
         ```
 
     *   Verify that the Kafka topics for `users` and `products` are created:
@@ -46,8 +48,6 @@ This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL t
 
 3.  **Test the CDC pipeline:**
 
-    *   **Important:** Before running these tests, ensure your MongoDB is clean. If you have old data, stop the environment (`docker compose down`), remove volumes (`docker volume rm cdc_mongodb_data`), and then start the environment again (`docker compose up -d`).
-
     *   **Insert a new user:**
 
         Insert a new user into the `users` table in PostgreSQL:
@@ -56,15 +56,11 @@ This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL t
         docker compose exec -T postgres2 psql -U user -d cdc_db -c "INSERT INTO users (name, email) VALUES ('John Doe', 'john.doe@example.com');"
         ```
 
-        Verify the new user via the API:
+        Verify the new user via the API and Redis cache:
 
         ```bash
         curl http://localhost:8001/users
-        ```
-
-        Expected output (may contain multiple entries if not starting with a clean MongoDB):
-        ```json
-        {"users": [{"_id": "<some_id>", "id": 1, "name": "John Doe", "email": "john.doe@example.com"}]}
+        curl http://localhost:8001/check-redis/user/1
         ```
 
     *   **Update a user:**
@@ -75,15 +71,11 @@ This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL t
         docker compose exec -T postgres2 psql -U user -d cdc_db -c "UPDATE users SET email = 'john.doe.new@example.com' WHERE name = 'John Doe';"
         ```
 
-        Verify the updated user via the API:
+        Verify the updated user via the API and Redis cache:
 
         ```bash
         curl http://localhost:8001/users
-        ```
-
-        Expected output (email should be updated):
-        ```json
-        {"users": [{"_id": "<some_id>", "id": 1, "name": "John Doe", "email": "john.doe.new@example.com"}]}
+        curl http://localhost:8001/check-redis/user/1
         ```
 
     *   **Delete a user:**
@@ -94,15 +86,11 @@ This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL t
         docker compose exec -T postgres2 psql -U user -d cdc_db -c "DELETE FROM users WHERE name = 'John Doe';"
         ```
 
-        Verify the user is deleted via the API:
+        Verify the user is deleted via the API and removed from Redis:
 
         ```bash
         curl http://localhost:8001/users
-        ```
-
-        Expected output (empty array):
-        ```json
-        {"users": []}
+        curl http://localhost:8001/check-redis/user/1
         ```
 
     *   **Insert a new product:**
@@ -113,68 +101,31 @@ This project demonstrates a Change Data Capture (CDC) pipeline from PostgreSQL t
         docker compose exec -T postgres2 psql -U user -d cdc_db -c "INSERT INTO products (name, price) VALUES ('Laptop', 1200.50);"
         ```
 
-        Verify the new product via the API:
+        Verify the new product via the API and Redis cache:
 
         ```bash
         curl http://localhost:8001/products
+        curl http://localhost:8001/check-redis/product/1
         ```
 
-        Expected output:
-        ```json
-        {"products": [{"_id": "<some_id>", "id": 1, "name": "Laptop", "price": "1200.50"}]}
-        ```
+    *   **Update a product (optional):**
 
-    *   **Update a product:**
-
-        Update the product's price in PostgreSQL:
+        Update the product price in PostgreSQL:
 
         ```bash
-        docker compose exec -T postgres2 psql -U user -d cdc_db -c "UPDATE products SET price = 1500.75 WHERE name = 'Laptop';"
+        docker compose exec -T postgres2 psql -U user -d cdc_db -c "UPDATE products SET price = 999.99 WHERE name = 'Laptop';"
         ```
 
-        Verify the updated product via the API:
+        Verify the updated product via the API and Redis cache:
 
         ```bash
         curl http://localhost:8001/products
+        curl http://localhost:8001/check-redis/product/1
         ```
 
-        Expected output (price should be updated):
-        ```json
-        {"products": [{"_id": "<some_id>", "id": 1, "name": "Laptop", "price": "1500.75"}]}
-        ```
+    *   **Check Elasticsearch:**
 
-    *   **Delete a product:**
-
-        Delete the product from PostgreSQL:
-
-        ```bash
-        docker compose exec -T postgres2 psql -U user -d cdc_db -c "DELETE FROM products WHERE name = 'Laptop';"
-        ```
-
-        Verify the product is deleted via the API:
-
-        ```bash
-        curl http://localhost:8001/products
-        ```
-
-        Expected output (empty array):
-        ```json
-        {"products": []}
-        ```
-
-    *   **Check Redis:**
-
-        Check if the user data is in Redis:
-
-        ```bash
-        curl http://localhost:8002/check-redis/user/1
-        ```
-
-        Check if the product data is in Redis:
-
-        ```bash
-        curl http://localhost:8002/check-redis/product/1
-        ```
+        You can check the data in Elasticsearch using Kibana at `http://localhost:5601`.
 
 4.  **Stop the environment:**
 
@@ -204,28 +155,10 @@ If you are having issues with the CDC pipeline, here are some commands that can 
     docker compose logs <service_name>
     ```
 
-*   **Check the status of the Debezium connector:**
+*   **Check the status of the connectors:**
 
     ```bash
-    curl http://localhost:8083/connectors/postgres-connector/status
-    ```
-
-*   **Check the configuration of the Debezium connector:**
-
-    ```bash
-    curl http://localhost:8083/connectors/postgres-connector
-    ```
-
-*   **Delete the Debezium connector:**
-
-    ```bash
-    curl -X DELETE http://localhost:8083/connectors/postgres-connector
-    ```
-
-*   **Register the Debezium connector:**
-
-    ```bash
-    curl -i -X POST -H "Accept:application/json" -H  "Content-Type:application/json" http://localhost:8083/connectors/ -d @register-postgres.json
+    curl http://localhost:8083/connectors
     ```
 
 *   **List the topics in Kafka:**
