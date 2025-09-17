@@ -7,6 +7,23 @@
     "type.name": "_doc",
     "key.ignore": "true",
     "schema.ignore": "false",
-    "behavior.on.null.values": "IGNORE"
+    "behavior.on.null.values": "IGNORE",
+    "transforms": "ExtractAfter,RenameMeta,ConvertOperationTimestamp,RenameTimestamp,CastFields",
+    "transforms.ExtractAfter.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.ExtractAfter.drop.tombstones": "false",
+    "transforms.ExtractAfter.delete.handling.mode": "rewrite",
+    "transforms.ExtractAfter.add.fields": "op,ts_ms",
+    "transforms.ExtractAfter.add.headers": "op",
+    "transforms.RenameMeta.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+    "transforms.RenameMeta.renames": "__op:operation_type,__ts_ms:operation_timestamp,__deleted:is_deleted",
+    "transforms.ConvertOperationTimestamp.type": "org.apache.kafka.connect.transforms.TimestampConverter$Value",
+    "transforms.ConvertOperationTimestamp.field": "operation_timestamp",
+    "transforms.ConvertOperationTimestamp.target.type": "string",
+    "transforms.ConvertOperationTimestamp.format": "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+    "transforms.ConvertOperationTimestamp.timezone": "UTC",
+    "transforms.RenameTimestamp.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+    "transforms.RenameTimestamp.renames": "operation_timestamp:operation_date",
+    "transforms.CastFields.type": "org.apache.kafka.connect.transforms.Cast$Value",
+    "transforms.CastFields.spec": "price:float64,is_deleted:boolean"
   }
 }
